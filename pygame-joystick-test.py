@@ -39,6 +39,10 @@ class joystick_handler(object):
         self.numballs   = self.joy.get_numballs()
         self.numbuttons = self.joy.get_numbuttons()
         self.numhats    = self.joy.get_numhats()
+        self.rumble_low = False
+        self.rumble_high = False
+        self.rumble_low_button = Rect(0, 0, 0, 0)
+        self.rumble_high_button = Rect(0, 0, 0, 0)
 
         self.axis = []
         for i in range(self.numaxes):
@@ -61,7 +65,7 @@ class input_test(object):
     class program:
         "Program metadata"
         name    = "Pygame Joystick Test"
-        version = "0.2"
+        version = "0.3"
         author  = "Denilson Figueiredo de Sá Maia"
         nameversion = name + " " + version
 
@@ -131,7 +135,7 @@ class input_test(object):
 
     def init(self):
         pygame.init()
-        pygame.event.set_blocked((MOUSEMOTION, MOUSEBUTTONUP, MOUSEBUTTONDOWN))
+        pygame.event.set_blocked((MOUSEBUTTONUP))
         # I'm assuming Font module has been loaded correctly
         self.load_the_fucking_font()
         # self.fontheight = self.font.get_height()
@@ -152,7 +156,7 @@ class input_test(object):
 
         # Find out the best window size
         rec_height = max(
-            5 + joy.numaxes + joy.numballs + joy.numhats + (joy.numbuttons + 9) // 10
+            6 + joy.numaxes + joy.numballs + joy.numhats + (joy.numbuttons + 9) // 10
             for joy in self.joy
         ) * self.fontheight
         rec_width = max(
@@ -165,10 +169,11 @@ class input_test(object):
         self.screen = pygame.display.set_mode(self.resolution, RESIZABLE)
         pygame.display.set_caption(self.program.nameversion)
         self.circle.convert()
-
+        
         while True:
             for i in range(self.joycount):
                 self.draw_joy(i)
+                self.update_rumble(i)
             pygame.display.flip()
             # self.clock.tick(30)
             for event in [pygame.event.wait(), ] + pygame.event.get():
@@ -203,6 +208,12 @@ class input_test(object):
                     self.joy[event.joy].button[event.button] = 0
                 elif event.type == JOYBUTTONDOWN:
                     self.joy[event.joy].button[event.button] = 1
+                elif event.type == MOUSEBUTTONDOWN and event.button == 1:
+                    for i in range(self.joycount):
+                        if self.mouse_in_rect(self.joy[i].rumble_low_button):
+                            self.joy[i].rumble_low = False if self.joy[i].rumble_low else True
+                        if self.mouse_in_rect(self.joy[i].rumble_high_button):
+                            self.joy[i].rumble_high = False if self.joy[i].rumble_high else True
 
     def rendertextline(self, text, pos, color, linenumber=0):
         self.screen.blit(
@@ -237,6 +248,36 @@ class input_test(object):
             (left + (width - height) * (value + 1) // 2, top)
         )
 
+    def mouse_in_rect(self, rect):
+        mouse = pygame.mouse.get_pos() 
+        return mouse[0] >= rect[0] and mouse[0] <= rect[0] + rect[2] and mouse[1] >= rect[1] and mouse[1] <= rect[1] + rect[3]
+
+    def draw_toggle_button(self, pressed, pos, text):
+        mouse = pygame.mouse.get_pos() 
+        hover = (
+            mouse[0] >= pos[0]
+            and mouse[0] <= pos[0] + pos[2]
+            and mouse[1] >= pos[1]
+            and mouse[1] <= pos[1] + pos[3]
+        )
+
+        color = (150, 150, 150) 
+        if(not pressed and hover):
+            color = (125, 125, 125) 
+        elif(pressed and not hover):
+            color = (100,100,100) 
+        elif (pressed and hover):
+            color = (50,50,50)
+
+        self.screen.fill(
+            color,
+            pos
+        )
+        self.screen.blit(
+            self.font.render(text, self.antialias, self.statictext, None),
+            (pos[0], pos[1])
+        )
+
     def draw_hat(self, value, pos):
         xvalue =  value[0] + 1
         yvalue = -value[1] + 1
@@ -263,7 +304,7 @@ class input_test(object):
         self.screen.fill(self.background, pos)
 
         # This is the number of lines required for printing info about this joystick.
-        # self.numlines = 5 + joy.numaxes + joy.numballs + joy.numhats + (joy.numbuttons+9)//10
+        # self.numlines = 7 + joy.numaxes + joy.numballs + joy.numhats + (joy.numbuttons+9)//10
 
         # Joy name
         # 0 Axes:
@@ -289,6 +330,7 @@ class input_test(object):
             "S%d hats:"       % joy.numhats
         ]+[ "D  %d=% d,% d"   % (i, v[0], v[1]) for i, v in enumerate(joy.hat ) ]+[
             "S%d buttons:"    % joy.numbuttons
+        ]+ [ "Srumble:"            
         ]
         for l in range(joy.numbuttons // 10 + 1):
             s = []
@@ -327,6 +369,35 @@ class input_test(object):
                 )
             )
         # self.draw_hat((int(joy.axis[3]),int(joy.axis[4])), (pos[0], pos[1] + (4+joy.numaxes+joy.numballs+0)*self.fontheight, tmpwidth, self.fontheight))
+
+        joy.rumble_low_button = (
+                pos[0],
+                pos[1] + (6 + joy.numaxes + joy.numballs + i + (joy.numbuttons+9)//10) * self.fontheight,
+                self.font.size(" Low ")[0],
+                self.fontheight
+            )
+        joy.rumble_high_button = (
+                pos[0]+joy.rumble_low_button[2]+self.font.size(" ")[0],
+                pos[1] + (6 + joy.numaxes + joy.numballs + i + (joy.numbuttons+9)//10) * self.fontheight,
+                self.font.size(" High ")[0],
+                self.fontheight
+            )
+        self.draw_toggle_button(
+            joy.rumble_low, 
+            joy.rumble_low_button,
+            " Low "
+        )
+        self.draw_toggle_button(
+            joy.rumble_high, 
+            joy.rumble_high_button,
+            " High "
+        )
+
+    def update_rumble(self, joyid):
+        joy_handler = self.joy[joyid]
+        low = 1 if joy_handler.rumble_low else 0
+        high = 1 if joy_handler.rumble_high else 0
+        joy_handler.joy.rumble(low, high, 0)
 
     def quit(self, status=0):
         pygame.quit()
